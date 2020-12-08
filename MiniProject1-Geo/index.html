@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<!-- Load d3.js -->
+<!-- <script src="https://d3js.org/d3.v4.js"></script> -->
+<!-- <script src="https://d3js.org/d3.v5.js"></script> -->
+
+<head>
+    <style>
+        body {
+            font-family: Helvetica, Arial, sans-serif
+        }
+
+        h1 {
+            background-color: #2a5599;
+            /* TODO 1
+            change the text to white and add a padding of 5px
+            2 lines of code
+            */
+            color: white;
+            padding: 5px;
+            
+        }
+
+        /* TODO 2
+        Add code to show a black border of 1px around all SVGs elements in the page
+        1-3 lines of code
+        */
+        #HeatMap{
+        border: solid 1px black;
+        background-color: #8B0000	;
+        }
+        
+        #WorldMap{
+        border: solid 1px black;
+        background-color: #87ceeb;
+        }
+
+        #BarGraphs{
+        border: solid 1px black;
+        }
+        
+
+        /* TODO 3
+         - Use the "display flex" feature from to show the items from class `mainView` side by side 
+         1-3 lines of cide
+        */
+        .mainView{
+            display: flex; /*alligns the items in mainView side by side*/
+            flex-wrap: wrap;
+        }
+
+
+    </style>
+    
+    
+</head>
+
+<body>
+    <h1>Donations between Countries</h1>
+    <div class="mainView">
+        <div>
+            <h2>Heat Map</h2>
+            <svg id="HeatMap"></svg>
+            
+        </div>
+        <div>
+            <h2>World Map</h2>
+            <svg id="WorldMap"></svg>
+        </div>
+        <div>
+          <h2>Stacked Bar Chart</h2>
+          <svg id="BarGraphs"></svg>
+        </div>
+    </div>
+</body>
+<script src="https://d3js.org/d3.v3.min.js"></script> <!--load d3 version 3 as d3v3 instead of d3-->
+<script>
+  d3v3 = d3
+  window.d3 = null
+</script>
+<script src="https://d3js.org/d3.v4.js"></script> <!--load d3 version 4 as d3v4 instead of d3-->
+<script>
+  d3v4 = d3
+  window.d3 = null
+</script>
+<script src="https://d3js.org/d3.v5.js"></script> <!-- load d3v5 as d3-->
+
+<!-- Create a div where the graph will take place -->
+<div id="my_dataviz"></div>
+
+<!--<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/1.7.0/d3-legend.min.js"></script> --> <!-- Legend by Susie Lu, used in problem 3-->
+<script src="d3-legend1.7.0.js"></script> <!--Manuualy copied into local file and changed d3. to d3v3.-->
+
+
+<script>
+// set the dimensions and margins of the graph
+//var margin = {top: 30, right: 30, bottom: 30, left: 30},
+//var margin = {top: 30, right: 100, bottom: 150, left: 120}
+var margin = {top: 150, right: 100, bottom: 150, left: 120}
+//var marginProblem1 = {top: 30, right: 100, bottom: 150, left: 120}
+var width = 800 - margin.left - margin.right
+var height = 800 - margin.top - margin.bottom;
+
+// append the svg object to the body of the page
+
+var svg = d3.select("#HeatMap")
+  .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform",
+          "translate(" + margin.left + "," + margin.top + ")");
+
+//make border size bigger
+
+let container = d3.select("#HeatMap")
+container
+  .attr("width", width + margin.left + margin.right)
+  //TODO: Set the height of the container
+  .attr("height", height + margin.top + margin.bottom)
+
+
+// Labels of row and columns
+//var myGroups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+//var myVars = ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"]
+var donors = []
+var recipients = []
+
+var csvData = []
+var geoJSON;
+//console.log("csvData before loadData: ", csvData)
+function loadData() {
+    return Promise.all([
+        d3.csv("aiddata.csv"),
+        //d3.json("countries.geo.json"), //this file i downloaded from online was too small, it was missing countries like liechtenstein
+        //d3.json("countriesManuallyUpdated.geo.json")
+        //d3.json("countries.geojson")
+        d3.json("countriesManuallyUpdated.geojson") //This file was provided from class site, I modified some countires to fit the name
+        //There were North and South Korea, I used South Korea as Korea
+    ]).then(datasets => {
+        csvData = datasets[0];
+        geoJSON = datasets[1]
+        return csvData,geoJSON
+    })
+}
+
+
+function afterLoadData(){
+  //const newData = d3.csv.parse(csvData);
+  //var newData = csvData
+  //console.log("csvData in afterLoadData: ", csvData)
+  //csvData.forEach((item, i) => console.log(`Hello ${item.donor} this ${item.recipient} there are ${item.commitment} blabla`));
+  //loop through each row and grab donor,recipient,commitment
+
+  /* -----------------------------  Start of Problem 1a Parsing data for heat map -------------------------------------- */ 
+
+  var grid = [];
+  csvData.forEach(function(item, i) { //forEach can be used on dictionary object
+  //console.log(`Hello ${item.donor} this ${item.recipient} there are ${item.commitment} blabla`)
+    
+    //idea from https://stackoverflow.com/questions/4329092/multi-dimensional-associative-arrays-in-javascript
+    curDonor = item.donor
+    if(curDonor in grid == false){
+      grid[curDonor] = []; //initialize object
+    }
+    
+    curRecipient = item.recipient
+    //grid[curDonor][curRecipient] = 0
+    if(curRecipient in grid[curDonor] == false){
+      grid[curDonor][curRecipient] = 0
+    }
+
+    curCommitment = Number(item.commitment_amount_usd_constant)
+    grid[curDonor][curRecipient] += curCommitment //sum up commitments from country A to country B
+    if(i==1){
+      console.log("curCommitment: ", curCommitment)
+    }
+
+    //append to recipients array to make 
+    if (recipients.includes(curRecipient)== false){
+      recipients.push(curRecipient)
+    }
+
+  });
+
+  console.log("grid: ", grid)
+  console.log("Total Australia donation to Thailand: ", grid["Australia"]["Thailand"])
+  //loop through grid to get first key (donor), append to donors array. I'm doing it here instead of forEach because of runtime
+  for (const [key, value] of Object.entries(grid)) {
+    donors.push(key)
+  }
+
+  //Get the top 5 purpose names
+    //First get all purpose names and commitment
+    console.log("csvData: ", csvData)
+    var PurposeAndCommitmentDict = {}
+    csvData.forEach(function(d){
+      //console.log("d in csvData: ", d)
+      purpose = d.coalesced_purpose_name
+      amount = +d.commitment_amount_usd_constant
+      if(!(PurposeAndCommitmentDict[purpose])){ //if the key is not defined, then create it
+        PurposeAndCommitmentDict[purpose] = amount
+      }
+      else{
+        PurposeAndCommitmentDict[purpose] += amount
+      }
+    })
+    //Top 5 purpose names
+    //first convert to list then sort by value
+    var PurposeAndCommitmentList = Object.keys(PurposeAndCommitmentDict).map(function(key) {return [key, PurposeAndCommitmentDict[key]];});
+    //sort the array
+    PurposeAndCommitmentList.sort(function(first, second) {return second[1] - first[1];});
+    TopFivePurposes = PurposeAndCommitmentList.slice(0, 5)
+    console.log("PurposeAndCommitmentList sorted: ", PurposeAndCommitmentList)
+    console.log("TopFivePurposes: ", TopFivePurposes)
+
+  
+  //Use the top 5 purpose names to get purpose: {country,totalCommitment}
+    //first get all purpose with all receiver,receiveAmount
+    PurposeCountryAmount = {}
+    csvData.forEach(function(d){
+      purpose = d.coalesced_purpose_name
+      receiver = d.recipient
+      commitment = +d.commitment_amount_usd_constant
+      if (!(PurposeCountryAmount[purpose])){
+        //PurposeCountryAmount[purpose] = {"receiver":receiver, "totalReceived":commitment}
+        PurposeCountryAmount[purpose] = {}
+        PurposeCountryAmount[purpose][receiver] = commitment
+      }
+      else{ //there's already an entry of this purpose
+        if(!PurposeCountryAmount[purpose][receiver]){
+          PurposeCountryAmount[purpose][receiver] = commitment
+        }
+        else{
+          PurposeCountryAmount[purpose][receiver] += commitment
+        }
+      }
+    })
+    console.log("PurposeCountryAmount: ",PurposeCountryAmount)
+    //Now grab the top 5 purposes
+    PurposeCountryAmountTopFive = {}
+    TopFivePurposes.forEach(function(item){
+      curPurpose = item[0]
+      //console.log("curPurpose: ", curPurpose)
+      PurposeCountryAmountTopFive[curPurpose] = PurposeCountryAmount[curPurpose]
+    })
+    console.log("PurposeCountryAmountTopFive: ", PurposeCountryAmountTopFive)
+  
+  //Now we need to create a bar chart (Each section will have a purpose name with a bar chart: commitment vs country) comeback3
+
+  
+  //donors = myGroups
+  //recipients = myVars
+
+  //console.log("donors: ", donors)
+  //console.log("recipients: ", recipients)
+
+  //convert grid[donor][recipient] to donations dictionary
+  //convert dictionary to a list: donations=[donation1,donation2,donation3,...], example donation1={donor:USA,recipient:Australia,commitment:1000000000}
+  //this is necessary to facilitate svg.selectAll.data(donations,function(){})
+  var donations = [] // list of {donor, recipient, commitment}
+  var eachCountryTotalDonations = [] // list of {donor,totalCommitment}
+  var eachCountryTotalReceptionTemp = {} // list of {recipient,totalAmountReceived}
+
+  Object.keys(grid).forEach(function(key) {
+    //console.log(key, grid[key]);
+    donor = key
+    recipientList = grid[key]
+    var totalCommitment = 0
+
+    //for each country donor, iterate to get the recipients and commitment
+    Object.keys(recipientList).forEach(function(recipientKey){
+      recipient = recipientKey
+      commitment = recipientList[recipientKey]
+      totalCommitment += commitment
+      //console.log(`commitment for ${donor} to ${recipient}: ${commitment}`);
+      donation = {"donor":donor,"recipient":recipient,"commitment":commitment}
+      //console.log("donation: ", donation)
+      donations.push(donation)
+
+      //recipient summing
+      if(!(recipient in eachCountryTotalReceptionTemp)){
+        eachCountryTotalReceptionTemp[recipient] = +commitment
+      }
+      else{
+        eachCountryTotalReceptionTemp[recipient] += (+commitment)
+      }
+    })
+
+    countryDonation = {"donor":donor,"totalCommitment":totalCommitment}
+    eachCountryTotalDonations.push(countryDonation)
+    
+  });
+
+  //convert dictionary to array
+  var eachCountryTotalReception = []
+  //console.log("eachCountryTotalReceptionTemp",eachCountryTotalReceptionTemp)
+  
+  Object.keys(eachCountryTotalReceptionTemp).forEach(function(key) {
+    receiver = key
+    amount = eachCountryTotalReceptionTemp[key]
+    reception = {"receiver":receiver,"totalReceived":amount}
+    eachCountryTotalReception.push(reception)
+  })
+  //console.log("eachCountryTotalReception after conversion: ",eachCountryTotalReception)
+
+  //find max commitment
+  let maxCommitment = d3.max(donations, d => d.commitment)
+  console.log("maxCommitment: ", maxCommitment)
+
+  //----------------------------------------- Start of Problem 1b: Drawing the Heat Map ------------------------------------
+  //Heatmap implementation: https://www.d3-graph-gallery.com/graph/heatmap_basic.html
+  // Build X scales and axis:
+  var x = d3.scaleBand()
+    .range([ 0, width ])
+    .domain(donors)
+    .padding(0.01);
+  svg.append("g")
+    .attr("transform", "translate(0," + height + ")")
+    //.attr("transform", "translate(0," + height + ") rotate(0,0,"+height+")")
+    .call(d3.axisBottom(x))
+    //rotate the x-axis text to make them vertical (source: https://bl.ocks.org/mbostock/4403522)
+    .selectAll("text")
+    .attr("y", 0)
+    .attr("x", 9)
+    .attr("dy", ".35em")
+    .attr("transform", "rotate(90)")
+    .style("text-anchor", "start");
+
+    //add labelname for x-axis (source: https://bl.ocks.org/d3noob/23e42c8f67210ac6c678db2cd07a747e)
+    svg.append("text")             
+      .attr("transform",
+            "translate(" + (width/2) + " ," + 
+                           (height + 100) + ")")
+      .style("text-anchor", "middle")
+      .text("Donors");
+
+    //add labelname for y-axis
+    svg.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 20 - margin.left)
+      .attr("x",0 - (height / 2))
+      .attr("dy", "1em")
+      .style("text-anchor", "middle")
+      .text("Recipients");
+
+  // Build X scales and axis:
+  var y = d3.scaleBand()
+    .range([ height, 0 ])
+    .domain(recipients)
+    .padding(0.01);
+  svg.append("g")
+    .call(d3.axisLeft(y));
+
+  // Build color scale
+  /*
+  var myColor = d3.scaleLinear()
+    .range(["red", "green"])
+    .domain([0,maxCommitment])
+  */
+
+  //var myColor = d3.scaleLinear()
+  var myColor = d3.scaleQuantize() //scalelear didn't map the values properly (e.g. maxValue was not #006d2c)
+  //var myColor = d3.scaleLog()
+  //var myColor = d3.scaleSqrt()
+    //.range(["#FFFFFF", "green"]) //white to green
+    //.range(["#EEEEEE", "green"]) //grey to green
+    //.range(['#ffffcc', '#a1dab4', '#41b6c4', '#2c7fb8', '#253494']) //yellow to blue
+    //.range(['#a1dab4', '#41b6c4', '#2c7fb8', '#253494']) //grey to green
+    .range(['#edf8e9', '#bae4b3', '#74c476', '#31a354','#006d2c']) //light green to dark green (http://colorbrewer2.org/#type=sequential&scheme=Greens&n=5)
+    .domain([0,maxCommitment])
+  console.log("Maxcommitmentcolor: ", myColor(maxCommitment))
+  
+  //instead of diviergent color scale, use one color with varying intensity, and sort by most donations
+
+  //console.log("donations", donations)
+  //drawing the rectangles for each position in the graph
+  svg.selectAll()
+    //.data(donations,function(){console.log("data: ")})
+    .data(donations)
+    .enter()
+    .append("rect")
+    .attr("x", function(d) { return x(d.donor) })
+    .attr("y", function(d) { return y(d.recipient) })
+    .attr("width", x.bandwidth() )
+    .attr("height", y.bandwidth() )
+    .style("fill", function(d) { 
+      //console.log("commitment: ", d.commitment)
+      //console.log("color: ", myColor(d.commitment))
+      return myColor(d.commitment)
+    } )
+
+  //create a list of all donations sorted
+  donationAmounts = []
+  donations.forEach(function(d){
+    donationAmounts.push(d.commitment)
+  })
+  rates = donationAmounts
+  console.log("rates: ", rates)
+  rates.sort((a,b) => a-b); //sort in increasing order
+  console.log("sorted rates: ", rates)
+  //create legend
+  var A = d3.quantile(rates,0)  
+  var B = d3.quantile(rates,0.25)
+  var C = d3.quantile(rates,0.5)
+  var D = d3.quantile(rates,0.75)
+  var E = d3.quantile(rates,1)
+  var color_domain = [A, B, C, D, E];
+  // Define labels shown for legend. Display the value to 2 decimal places.
+  var color_domain_labels = color_domain.map(d => d.toFixed(2))
+  //var color_range = ['#ffffcc', '#a1dab4', '#41b6c4', '#2c7fb8', '#253494'];
+  //var color_range = ['#a1dab4', '#41b6c4', '#2c7fb8', '#253494'];
+  var color_range = ['#edf8e9', '#bae4b3', '#74c476', '#31a354','#006d2c']
+  var colorScale = d3.scaleLinear()
+    .domain(color_domain)
+    .range(color_range);
+  // step 2: create opacity scale
+  var minVal = d3.min(rates)
+  var maxVal = d3.max(rates)
+  var opacityScale = d3.scaleLinear()
+    .domain([minVal,maxVal])
+    .range([0.2,1])
+
+  var legend = svg.selectAll("g.legend")
+        .data(color_domain)
+        .enter().append("g")
+        .attr("class", "legend");
+
+      // ==== define svg gradiant ====
+      for (var i = 0; i < color_range.length - 1; i++) {
+        var defs = svg.append("defs");
+        var linearGradient = defs.append("linearGradient")
+            .attr("id", "linear-gradient-"+i);
+          linearGradient
+            .attr("x1", "0%")
+            .attr("y1", "0%")
+            .attr("x2", "100%")
+            .attr("y2", "0%");
+        //Set the color for the start (0%)
+        linearGradient.append("stop")
+            .attr("offset", "0%")
+            .attr("stop-color", color_range[i]); //light color
+
+        //Set the color for the end (100%)
+        linearGradient.append("stop")
+            .attr("offset", "100%")
+            .attr("stop-color", color_range[i+1]); //dark color
+      }
+
+      // legend for colors
+      var ls_w = 80, ls_h = 20, legend_left = 20, ls_y =550;
+      
+      LegendShiftY = -height-margin.top
+      legend.append("rect")
+        .attr("x", (d, i)=>legend_left+ i*ls_w)
+        .attr("y", ls_y + LegendShiftY)
+        .attr("width", ls_w)
+        .attr("height", ls_h)
+        // step 5: set the linear gradient color pattern for the legend. Follow the instructions in the README.
+        //.attr("fill", '#66c2a4');
+        .attr("fill", function(d,i){
+          return "url(#linear-gradient-"+i+")" //url() = the color that the element with the id of linear-gradient-i represents.
+        })
+
+        var legend_title = "Commitment Amount in USD";
+				svg.append("g")
+			      .attr("transform", "translate(0," + (ls_y+ls_h+LegendShiftY) + ")")
+			      .call(d3.axisBottom(d3.scaleOrdinal()
+			      	.domain(color_domain_labels)
+			      	.range([legend_left, legend_left+ls_w, legend_left+ls_w*2,legend_left+ls_w*3,legend_left+ls_w*4])
+			      	//.range([legend_left, legend_left+ls_w, legend_left+ls_w*2,legend_left+ls_w*3])
+			      ));
+
+				svg.append("text")
+					.attr("x", 50)
+					.attr("y", 540+LegendShiftY)
+					//.attr("y", 0)
+					.attr("class", "legend_title")
+					.text(()=>{return legend_title});
+  /* -----------------------------  End of Problem 1: Drawing the World Map -------------------------------------- */ 
+
+
+  /* -----------------------------  Start of Problem 2: Drawing the World Map -------------------------------------- */  
+  
+
+  //configure map dimensions
+  let mapWidth = 600;
+  let mapHeight = 400;
+  let containerWorldMap = d3.select("#WorldMap")//TODO: select the svg with id Map
+     .attr("width",mapWidth).attr("height",mapHeight)//TODO: set the width and height of the conatiner to be equal the width and height variables.
+
+  //map projection
+  let projection = d3.geoMercator()//TODO: Create a projection of type Mercator.
+  projection.scale(97)
+            .translate([mapWidth / 2, mapHeight / 2 + 20])
+  //return projection
+
+  //drawBaseMap
+  console.log("geoJSON: ",geoJSON)
+  let countries = geoJSON.features
+  console.log("countries: ", countries)
+  let path = d3.geoPath().projection(projection)//TODO: create a geoPath generator and set its projection to be the projection passed as parameter.
+  console.log("containerWorldMap: ",containerWorldMap);
+  containerWorldMap.selectAll("path").data(countries)
+    .enter().append("path")
+    .attr("d", d=>path(d))//TODO: use the path generator to draw each country )
+    .attr("stroke", "#ccc")
+    .attr("fill", "#eee")
+
+  //preprocess geoJSON data to make it have one point per country (take the mean of x and mean of y)
+  let preprocessGeoRecords = [] //can be used for data binding
+  let preprocessGeoRecordsDict = {} //dictionary used later for comparing
+  geoJSON.features.forEach(function(item, i) {
+    countryName = item.properties.ADMIN
+    //console.log("countryName: ", countryName)
+    //item = [[(23,85)],[23.5,86]] , [[23,52],[25,66]]]
+    let countryLongitudeSum = 0
+    let countryLatitudeSum = 0
+    let numCoords = 0
+    //console.log("countryName: ", countryName)
+    
+    //check if there's still an array inside. Ex: [[coord1,coord2,coord3,...]]. This is a bad glitch in the geojson file.
+    //console.log("item.geometry.coordinates", item.geometry.coordinates)
+    
+    /*
+    if(item.geometry.coordinates.length == 1){ //try to catch the bad case of [ [coord1,coord2] ]
+      if(item.geometry.coordinates[0].length != 2){ //if it's not the good case of a single coord inside the array [coord1]=[[x,y]]
+        //bad case so adjust to just take the first position (i.e. [[coord1,coord2,...]] --> [coord1,coord2,...])
+        item.geometry.coordinates = item.geometry.coordinates[0]
+      } 
+    }
+    */
+    /*
+    if(item.geometry.coordinates[0][0][0] != null){
+      badCaseExist = true
+    }
+
+    if(item.geometry.coordinates.length == 2) //bad case of coords = [[list of coords],[list of coords]]=[[(x,y),(x,y),(x,y)],[[()]]]
+      if(item.geometry.coordinates[0][0])//not the good case that it is [listof 2 coords]=[(x,y),(x,y)]
+    */
+
+    item.geometry.coordinates.forEach(function (arrayInside,j){
+      //console.log("array j: ", j)
+      //console.log("arrayInside: ", arrayInside)
+      arrayInside.forEach(function(coordinate,k){
+        //console.log("coordinate k: ", k)
+        //console.log("coordinate: ",coordinate)
+        
+        //if coordinates is [(x,y),(x,y),...] instead of just (x,y) then do another forEach
+        //if(false){ //dummy false, so always go to else, this is for debugging
+        if(coordinate[0][0] != null){
+          coordinate.forEach(function(coordinateAgain,m){
+            longitude = +coordinateAgain[0]
+            latitude = +coordinateAgain[1]
+            numCoords += 1
+            countryLongitudeSum += longitude
+            countryLatitudeSum += latitude
+            //console.log("countryLongitudeSum: ", countryLongitudeSum)
+          })
+        }
+        else{
+          longitude = +coordinate[0]
+          latitude = +coordinate[1]
+          numCoords += 1
+          countryLongitudeSum += longitude
+          countryLatitudeSum += latitude
+          //console.log("countryLongitudeSum: ", countryLongitudeSum)
+        }
+        //console.log("countryLongitudeSum: ", countryLongitudeSum)
+        
+      })
+    })
+    //compute average
+    let countryLongitude = countryLongitudeSum/numCoords
+    let countryLatitude = countryLatitudeSum/numCoords
+    countryRecord = {"countryName":countryName, "countryLongitude":countryLongitude,"countryLatitude":countryLatitude}
+    preprocessGeoRecords.push(countryRecord) //array
+    preprocessGeoRecordsDict[countryName] = {"countryLongitude":countryLongitude,"countryLatitude":countryLatitude} //dictionary
+    
+  })
+
+  //verify that the preprocess is correct (i.e. the averages end up to be within range of the separate points)
+  console.log("preprocessGeoRecords", preprocessGeoRecords)
+  //console.log("Afghanistan record (should expect around (65,35): ", preprocessGeoRecords["Afghanistan"])
+  preprocessGeoRecords.forEach( function(d){
+    if(d.countryName == "Afghanistan"){
+      console.log(`Afghanistan record (should expect around (65,35): ${d.countryLongitude},${d.countryLatitude}`)
+    }
+  })
+
+  //console.log("preprocessGeoRecords as a list: ", preprocessGeoRecords)
+  //draw a circle on country X for each donation from X to Y (where Y are a list of countries)
+  //draw a circle on country X for each donation from Y to X
+
+  //Need to allign the country sum of donations with the geoPreprocessRecords
+  console.log("donations: ", donations)
+  console.log("preprocessGeoRecords: ",preprocessGeoRecords)
+  console.log("preprocessGeoRecordsDict: ",preprocessGeoRecordsDict)
+  console.log("eachCountryTotalDonations: ", eachCountryTotalDonations)
+  console.log("eachCountryTotalReception", eachCountryTotalReception)
+
+  let totalCommitmentMax = d3.max(eachCountryTotalDonations, d => d.totalCommitment)
+  console.log("totalCommitmentMax: ", totalCommitmentMax)
+  var rectangleScaler = d3.scaleLinear()
+    .domain([0,totalCommitmentMax])
+    .range([1,8])
+
+  
+  //console.log("preprocessGeoRecordsDict[United States]",preprocessGeoRecordsDict["United States"])
+
+  var donorShiftX = {} //dictionary for shifting the recipient rectangles to the right of the donor
+ 
+  console.log("drawing circles for each country with their respective total donation") 
+  //let rectanglesDonors = containerWorldMap.selectAll("rect");
+  let rectangles = containerWorldMap.selectAll("rect")
+  //console.log("preprocessGeoRecords: ", preprocessGeoRecords)
+  rectangles.data(eachCountryTotalDonations).enter()
+    .append("rect")
+    //.attr("r", 5)
+    .attr("width", function(d){
+      theDonor = d.donor
+      theCommitment = d.totalCommitment
+      radiusOfCommitment = rectangleScaler(theCommitment)
+      donorShiftX[theDonor] = radiusOfCommitment
+      return radiusOfCommitment
+    })
+    .attr("height", function(d){
+      //theDonor = d.donor
+      theCommitment = d.totalCommitment
+      radiusOfCommitment = rectangleScaler(theCommitment)
+      return radiusOfCommitment
+    })
+    .attr("x", function(d){
+      theDonor = d.donor
+
+      //shift right to avoid stacking donors and recipients
+      radiusOfCommitment = rectangleScaler(d.totalCommitment)
+
+      //console.log('theDonor: ', theDonor)
+      donationRecord = preprocessGeoRecordsDict[d.donor]
+      //console.log("donationRecord: ", donationRecord)
+      theLongitude = donationRecord.countryLongitude
+      theLatitude = donationRecord.countryLatitude
+      //console.log("theLongitude", theLongitude)
+      //console.log(`Donor: ${theDonor}, Longitude: ${theLongitude}, Latitude: ${theLatitude} `)
+      xyArray = projection([+theLongitude, +theLatitude]) //projection(longitude,latitude) --> (x,y) //projection maps longitude,latitude to x,y on html plane
+      //console.log(`x,y: ${xyArray}, d.countryLongitude: ${d.countryLongitude} `)
+      projectedX = xyArray[0]
+      //console.log(`Projected (x,y) for ${theDonor}: (${xyArray[0]},${xyArray[1]})`)
+      return projectedX
+    })
+    .attr("y", function(d){
+      theDonor = d.donor
+      //console.log('theDonor: ', theDonor)
+      donationRecord = preprocessGeoRecordsDict[d.donor]
+      //console.log("donationRecord: ", donationRecord)
+      theLongitude = donationRecord.countryLongitude
+      theLatitude = donationRecord.countryLatitude
+      //console.log("theLongitude", theLongitude)
+      //console.log(`Donor: ${theDonor}, Longitude: ${theLongitude}, Latitude: ${theLatitude} `)
+      xyArray = projection([+theLongitude, +theLatitude])
+      //console.log(`x,y: ${xyArray}, d.countryLongitude: ${d.countryLongitude} `)
+      projectedY = xyArray[1]
+      return projectedY
+    })
+    .attr("fill", "#2a5599")
+
+  
+
+  console.log("drawing rectangles for each country with their respective total reception") 
+  //console.log("donorShiftX: ", donorShiftX)
+  //console.log("preprocessGeoRecords: ", preprocessGeoRecords)
+  //rectangles = containerWorldMap.selectAll("rect"); //don't do this otherwise it will overwrite donor rectangles with recipient rects
+  rectangles.data(eachCountryTotalReception).enter()
+    .append("rect")
+    //.attr("r", 5)
+    .attr("width", function(d){
+      //theDonor = d.donor
+      //console.log("d in rectangular width for receivers: ", d)
+      theCommitment = d.totalReceived
+      radiusOfCommitment = rectangleScaler(theCommitment)
+      return radiusOfCommitment
+    })
+    .attr("height", function(d){
+      //theDonor = d.donor
+      theCommitment = d.totalReceived
+      radiusOfCommitment = rectangleScaler(theCommitment)
+      return radiusOfCommitment
+    })
+    .attr("x", function(d){
+      theReceiver = d.receiver
+      //console.log('theReceiver: ', theReceiver)
+      donationRecord = preprocessGeoRecordsDict[theReceiver]
+      //console.log("donationRecord: ", donationRecord)
+      theLongitude = donationRecord.countryLongitude
+      theLatitude = donationRecord.countryLatitude
+      //console.log("theLongitude", theLongitude)
+      //console.log(`Donor: ${theDonor}, Longitude: ${theLongitude}, Latitude: ${theLatitude} `)
+      xyArray = projection([+theLongitude, +theLatitude]) //projection(longitude,latitude) --> (x,y) //projection maps longitude,latitude to x,y on html plane
+      //console.log(`x,y: ${xyArray}, d.countryLongitude: ${d.countryLongitude} `)
+      projectedX = xyArray[0]
+      //console.log(`Projected (x,y) for ${theReceiver}: (${xyArray[0]},${xyArray[1]})`)
+
+      donorShift = 0
+      if((donorShiftX[theReceiver])){ //if this country also donoated, then apply a shift
+        donorShift = donorShiftX[theReceiver]
+      }
+      shiftX = donorShift
+      //console.log(`donorShift: ${donorShift}, shiftX: ${shiftX}, recipientShiftX: ${recipientShiftX}`)
+      return projectedX + shiftX
+    })
+    .attr("y", function(d){
+      theReceiver = d.receiver
+      //console.log('theDonor: ', theDonor)
+      donationRecord = preprocessGeoRecordsDict[theReceiver]
+      //console.log("donationRecord: ", donationRecord)
+      theLongitude = donationRecord.countryLongitude
+      theLatitude = donationRecord.countryLatitude
+      //console.log("theLongitude", theLongitude)
+      //console.log(`Donor: ${theDonor}, Longitude: ${theLongitude}, Latitude: ${theLatitude} `)
+      xyArray = projection([+theLongitude, +theLatitude])
+      //console.log(`x,y: ${xyArray}, d.countryLongitude: ${d.countryLongitude} `)
+      projectedY = xyArray[1]
+      return projectedY
+    })
+    .attr("fill", "red")
+
+    //add legend
+    
+    var keys = ["donated","received"]
+    //legend source from: https://www.d3-graph-gallery.com/graph/custom_legend.html
+    // Usually you have a color scale in your chart already
+    var color = d3.scaleOrdinal()
+      .domain(keys)
+      //.range(d3.schemeSet2);
+      .range(["blue","red"]);
+
+    legendShiftX = -80
+    legendShiftY = 250
+    // Add one dot in the legend for each name.
+    containerWorldMap.selectAll("mydots")
+      .data(keys)
+      .enter()
+      .append("circle")
+        .attr("cx", 100+legendShiftX)
+        .attr("cy", function(d,i){ return 100 +legendShiftY+ i*25}) // 100 is where the first dot appears. 25 is the distance between dots
+        .attr("r", 7)
+        .style("fill", function(d){ return color(d)})
+
+    // Add one dot in the legend for each name.
+    containerWorldMap.selectAll("mylabels")
+      .data(keys)
+      .enter()
+      .append("text")
+        .attr("x", 120+legendShiftX)
+        .attr("y", function(d,i){ return 100+legendShiftY + i*25}) // 100 is where the first dot appears. 25 is the distance between dots
+        .style("fill", function(d){ return color(d)})
+        .text(function(d){ return d})
+        .attr("text-anchor", "left")
+        .style("alignment-baseline", "middle")
+
+  //---------------------------------------------Start of Problem 3: Stacked Bar Chart ------------------------------------------------------
+  //Code taken and modified from: http://bl.ocks.org/ckothari/1678dc7ef6c5cd2264f55dd490033c2c
+  //loop through each purpose and make a graph for it
+  dataset = [
+        {label:"Art and Humanities", "Not Satisfied":25, "Not Much Satisfied":40, "Satisfied": 15, "Very Satisfied":20},
+        {label:"Sciences", "Not Satisfied":5, "Not Much Satisfied":30, "Satisfied": 50, "Very Satisfied":15},
+        {label:"Health Sciences", "Not Satisfied":20, "Not Much Satisfied":30, "Satisfied": 40, "Very Satisfied":10},
+        {label:"Social Sciences", "Not Satisfied":10, "Not Much Satisfied":40, "Satisfied": 45, "Very Satisfied":5},
+        {label:"Architecture and Engineering", "Not Satisfied":5, "Not Much Satisfied":15, "Satisfied": 40, "Very Satisfied":40},
+    ];
+
+    //{label:"countryname", "Purpose1":commitment1, ... }
+    //organize the data to be in the above format
+    console.log("PurposeCountryAmountTopFive: ",PurposeCountryAmountTopFive)
+    datasetTemp = {}
+      //arange by country
+      Object.keys(PurposeCountryAmountTopFive).forEach(function(purposeKey){
+        //console.log("purposeKey: ", purposeKey)
+        purpose = purposeKey
+        countryDict = PurposeCountryAmountTopFive[purpose]
+        //loop through each country
+        Object.keys(countryDict).forEach(function(countryKey){
+          countryName = countryKey
+          commitment = countryDict[countryKey]
+          
+          if(!(datasetTemp[countryName])){
+            datasetTemp[countryName] = {}
+            datasetTemp[countryName][purpose] = commitment
+          }
+          else{
+            if(!(datasetTemp[countryName][purpose])){
+              datasetTemp[countryName][purpose] = commitment
+            }
+            else{
+              datasetTemp[countryName][purpose] += commitment
+            }
+          }
+
+        })
+      })
+      console.log("datasetTemp: ", datasetTemp) // {country: {purpose:commitment} }
+
+      //organize into label format
+      finalDataset = []
+      Object.keys(datasetTemp).forEach(function(countryKey){
+        country = countryKey
+        purposeDict = datasetTemp[countryKey]
+
+        record = {label:country}
+        Object.keys(purposeDict).forEach(function(purposeKey){
+          purpose = purposeKey
+          amount = purposeDict[purpose]
+          record[purpose] = amount
+          //console.log(`appending for (${purpose}), (${record[purpose]})`)
+        })
+        finalDataset.push(record)
+      })
+      console.log("finalDataset: ", finalDataset)
+      dataset = finalDataset
+      //console.log("finalDataSet[0].label: ",finalDataset[0].label)
+      //for some reason, the finalDataset gets a total label when the full code runs, but not if we throw an error after this line
+      //thisData = finalDataset[0]
+      //console.log("total: ",thisData[label])
+
+    function wrap(text, width) {
+        text.each(function() {
+            var text = d3v3.select(this),
+                    words = text.text().split(/\s+/).reverse(),
+                    word,
+                    line = [],
+                    lineNumber = 0,
+                    lineHeight = 1.1, // ems
+                    y = text.attr("y"),
+                    dy = parseFloat(text.attr("dy")),
+                    tspan = text.text(null).append("tspan").attr("x", 0).attr("y", y).attr("dy", dy + "em");
+            while (word = words.pop()) {
+                line.push(word);
+                tspan.text(line.join(" "));
+                if (tspan.node().getComputedTextLength() > width) {
+                    line.pop();
+                    tspan.text(line.join(" "));
+                    line = [word];
+                    tspan = text.append("tspan").attr("x", 0).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "em").text(word);
+                }
+            }
+        });
+    }
+    //https://stackoverflow.com/questions/53398123/using-dy-attribute-in-d3-to-align-labels-with-ticks
+
+    //make axis longer
+    var axisexpandAmount = 500 //testing amount to expand my yaxis, to make the smaller stacked amounts more visible
+    width = width + 2000
+    height = height + axisexpandAmount
+    var x = d3v3.scale.ordinal()
+            .rangeRoundBands([0, width], .1,.3);
+    var y = d3v3.scale.linear()
+            //.rangeRound([height, 0]);
+            .range([height, 0]);
+    var colorRange = d3v3.scale.category20();
+    var color = d3v3.scale.ordinal()
+            .range(colorRange.range());
+    var xAxis = d3v3.svg.axis()
+            .scale(x)
+            .orient("bottom");
+    var yAxis = d3v3.svg.axis()
+            .scale(y)
+            .orient("left")
+            .tickFormat(d3v3.format(".2s"));
+    svg = d3v3.select("#BarGraphs").append("svg")
+            .attr("width", 1000+width + margin.left + margin.right)
+            .attr("height", 1000+height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    //make svg bigger
+    //width = width + 500
+    let containerThree = d3.select("#BarGraphs")
+    containerThree
+      .attr("width", width + margin.left + margin.right)
+      //TODO: Set the height of the container
+      .attr("height", height + margin.top + margin.bottom)
+    
+    var divTooltip = d3v3.select("body").append("div").attr("class", "toolTip");
+    
+    //get top 5 couontries in a list
+    topFiveCountryNames = []
+    TopFivePurposes.forEach(function(d){
+      topFiveCountryNames.push(d[0])
+    })
+    console.log("topFiveCountryNames", topFiveCountryNames)
+
+    //color.domain(d3v3.keys(dataset[0]).filter(function(key) { return key !== "label"; })); //ah the reason why we only had 3 purposes instead of 5 is because the code only takes in dataset[0]'s values'
+    color.domain(topFiveCountryNames);
+    //tempKeys = d3v3.keys(dataset[0]).filter(function(key) { return key !== "label";})
+    //console.log("keys: ",tempKeys)
+    //console.log("TopFivePurposes: ", TopFivePurposes)
+
+    dataset.forEach(function(d) {
+        var y0 = 0;
+        //console.log("dataset d: ", d)
+        d.values = color.domain().map(function(name) { 
+          //console.log("name appending: ",name, d[name])
+          return {name: name, y0: y0, y1: y0 += +d[name]}; 
+          });
+        d.total = d.values[d.values.length - 1].y1; //add total to the dataset, and it seems finalDataSet gets updated also, as if it's a pointer. console.log("finalDataSet[0].totalZ: ",finalDataset[0].total)
+    });
+    x.domain(dataset.map(function(d) { return d.label; }));
+    y.domain([0, 2.5 * d3v3.max(dataset, function(d) { return d.total; })]); //had to manually adjust the y-axis max amount
+    svg.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + (height) + ")")
+            
+            .call(xAxis)
+    //x-axis label title
+    svg.append("text")  
+    .attr("transform",
+    "translate(" + (width/2) + " ," + 
+                    (height + margin.top + 80) + ")")
+    .style("text-anchor", "middle")
+    .style("font-size", "35px")
+    .text("Country Receiver of Money");
+            /*
+            .append("text")
+            .text("Country")
+            .style("text-anchor", "end")*/
+    //y-axis label text
+    svg.append("g")
+            .attr("class", "y axis")
+            //.attr("y", 1000)
+            .call(yAxis)
+            .append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 100) //moves the text right by 100 units
+            //.attr("dy", ".71em")
+            .attr("dy", "-5em") //distance of text from y-axis
+            .style("font-size", "35px")
+            //.style("text-anchor", "start")
+            //.attr("x", -height/2) //shift veritcally to middle of svg
+            .attr("x", -height+height/6) //shift veritcally to middle of svg
+            .text("Amount of commitment received (G means 10^6)");
+    var bar = svg.selectAll(".label")
+            .data(dataset)
+            .enter().append("g")
+            .attr("class", "g")
+            .attr("transform", function(d) { return "translate(" + x(d.label) + ",0)"; });
+    svg.selectAll(".x.axis .tick text")
+            .call(wrap, x.rangeBand())
+            //.attr("dy", "5em") //offset from the x-axis line. Edit: need to edit wrap function
+            //.attr("transform", "rotate(-90)") //rotate the xaxis text to make them vertical
+    //svg.selectAll(".x.axis .tick text").attr("transform", "translate(0," + (50) + ")")
+
+    var bar_enter = bar.selectAll("rect")
+    .data(function(d) { return d.values; })
+    .enter();
+
+    bar_enter.append("rect")
+        .attr("width", x.rangeBand())
+        //.attr("y", function(d) { return y(d.y1); })
+        .attr("y", function(d) { 
+          if(isNaN(d.y1)){
+            d.y1 = 0
+            ret = d.y1
+          }
+          else{
+            ret = d.y1
+          }
+          //console.log("d.y1: ", d.y1)
+          //console.log("ret: ", ret)
+          return y(ret); }
+          )
+        //.attr("y", function(d) { return 15; })
+        .attr("height", function(d) { 
+          //console.log(`d.y0,d.y1: (${d.y0},${d.y1})`)
+          
+          d.y0 = d.y0 || 0 //convert false values to 0 (e.g. NaN,undefined,...)
+          d.y1 = d.y1 || 0
+          
+          ret = (y(d.y0) - y(d.y1)) //keeping it NaN so the bars don't go below y=0
+          //ret = Math.abs(y(d.y0) - y(d.y1))
+
+          if(ret<0){
+            ret = 0
+          }
+          //console.log("height: ", ret)
+          return ret; 
+          })
+        .style("fill", function(d) { return color(d.name); });
+    
+    //show amount donated inside the bar
+    /* //I commented it out because it's hard to see
+    bar_enter.append("text")
+        .text(function(d) { return d3v3.format(".2s")(d.y1-d.y0); })
+        //.text(function(d) { return d3v3.format(".2s")(d.y1-d.y0)+"%"; })
+        .attr("y", function(d) { return y(d.y1)+(y(d.y0) - y(d.y1))/2; })
+        .attr("x", x)
+        //.attr("x", x.rangeBand()/3)
+        .style("fill", 'grey');
+    */
+    var legendXCenter = width/3
+    svg.append("g")
+            .attr("class", "legendLinear")
+            //.attr("transform", "translate(0,"+(height+80)+")");
+            .attr("transform", "translate("+(legendXCenter)+",0)");
+    
+            
+    var legend = d3v3.legend.color()
+            .shapeWidth(height/4)
+            .shapePadding(10)
+            .orient('horizontal')
+            .scale(color);
+    svg.select(".legendLinear")
+            //.attr("transform","translate(5,5)")
+            .call(legend)
+            .append("text")  
+              .attr("transform","translate("+(legendXCenter)+",100)")
+              .style("text-anchor", "middle")
+              .style("font-size", "20px")
+              .text("Top 5 purposes");
+  /* -----------------------------  End of Problem 3: Stacked Bar Charts  -------------------------------------- */ 
+}//afterLoadData
+
+  
+
+loadData().then(afterLoadData)
+//loadData().then(console.log("after load data"))
+
+
+
+/*
+debug notes
+1. d3.v5 doesn't let me do svg.selectAll().data(data,function(d){//action here}
+
+*/
+</script>
