@@ -1,0 +1,407 @@
+<script src="https://d3js.org/d3.v4.js"></script>
+<head>
+    <style>
+        body {
+            font-family: Helvetica, Arial, sans-serif
+        }
+
+        h1 {
+            background-color: #2a5599;
+            color: #ffffff;
+            padding: 5px;
+            
+        }
+
+        /* //don't need the border
+        #my_dataviz{
+            border: solid 1px black;
+            background-color: white;
+        }*/
+        
+        .mainView{
+            display: flex; /*alligns the items in mainView side by side*/
+            flex-wrap: wrap;
+        }
+
+
+    </style>   
+</head>
+
+<body>
+    <h1>Visualization 2: Top 10 Donation Purposes and Commitment Over Time</h1>
+    <div class="mainView">
+        <div>
+            <h2>Stacked Percent Area Chart</h2>
+            <h3>Interaction 1: hover over Legend categories to highlight</h3>
+            <h3>Interaction 2: Drag horizontally on the graph to zoom in, double click to zoom out</h3>
+            <svg id="my_dataviz"></svg>
+        </div>       
+        
+    </div>
+</body>
+
+<!-- Load d3.js & color scale-->
+<script src="https://d3js.org/d3.v3.min.js"></script> <!--load d3 version 3 as d3v3 instead of d3-->
+<script>
+  d3v3 = d3
+  window.d3 = null
+</script>
+
+<script src="https://d3js.org/d3.v5.js"></script> <!--load d3 version 35as d3v5 instead of d3-->
+<script>
+    d3v5 = d3
+    window.d3 = null
+</script>
+
+<script src="https://d3js.org/d3.v4.js"></script> <!--load d3 version 4 as d3-->
+
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+
+
+
+<script>
+    
+    var csvData = []
+
+    function loadData() {
+        return Promise.all([
+            d3v5.csv("aiddata.csv")
+        ]).then(datasets => {
+            csvData = datasets[0];
+            return csvData
+        })
+    }
+
+    function question2(){
+        console.log("csvData: ", csvData)
+
+        //parse data
+        //Need: 
+        //donorCountry: year,donorAmount (sorted by year from lowest to highest)
+        //recepientCountry: year,recipientAmount
+        yearlyPurposeDonation = []
+        purposeDonation = [] //this is to sum up the donations for each purpose to find top 10 purposes
+        debugCounter = -1 //used to print a small amount of times
+        csvData.forEach(function(item,i){
+            debugCounter += 1
+            
+            curYear = item.year
+            curPurpose = item.coalesced_purpose_name
+            curPurpose = curPurpose.replace(/[/)(]/g,'And') //reformat the text to not have other special chars, and use _ for space. This is to prevent selector hover errors
+            curPurpose = curPurpose.replace(/ /g,'_')
+            curCommitment = +item.commitment_amount_usd_constant
+
+            //{year: {purpose:commitment}} e.g. {1972:{medical:10M,industrial:25M,war:5M}}
+            if (curYear in yearlyPurposeDonation == false){
+                yearlyPurposeDonation[curYear] = {}
+            }
+            if (curPurpose in yearlyPurposeDonation[curYear] == false){
+                yearlyPurposeDonation[curYear][curPurpose] = curCommitment
+            }
+            else{
+                yearlyPurposeDonation[curYear][curPurpose] += curCommitment
+            }
+            
+            if(curPurpose in purposeDonation == false){
+                purposeDonation[curPurpose] = curCommitment
+            }
+            else{
+                purposeDonation[curPurpose] += curCommitment
+            }
+                
+        })
+        console.log("yearlyPurposeDonation: ", yearlyPurposeDonation)
+
+        //focus on the top 10 donated purpose
+            console.log("purposeDonation: ", purposeDonation)
+            //sort the dictionary by value from highest to lowest
+            var purposeDonationSorted = Object.keys(purposeDonation).map(function(key) {
+                return [key, purposeDonation[key]];
+            });
+            // Sort the array based on the second element
+            purposeDonationSorted.sort(function(first, second) {
+                return second[1] - first[1];
+            });
+            //console.log("sorted purposeDonation: ",purposeDonationSorted)
+            //get the top 10 items, note this is an array
+            topTenPurposes = purposeDonationSorted.slice(0,10)
+            console.log("topTenPurposes: ", topTenPurposes)
+            topTenPurposeNames = []
+            topTenPurposes.forEach(function(eachPurpose){
+                topTenPurposeNames.push(eachPurpose[0])
+            })
+            console.log("topTenPurposeNames: ", topTenPurposeNames)
+        
+        //now that we have the names, reformat the yearlyPurposeDonation dicionary to only use the top 10 purposes
+        yearlyPurposeDonationTopTen = []
+        Object.keys(yearlyPurposeDonation).forEach(function(yearKey){
+            curYear = yearKey
+            yearlyPurposeDonationTopTen[curYear] = {}
+            for(i=0; i<topTenPurposeNames.length; i++){
+                purposeToAppend = topTenPurposeNames[i]
+                if(purposeToAppend in yearlyPurposeDonation[curYear] == false){ //top 10 purpose doesn't exist, so make value 0
+                    yearlyPurposeDonationTopTen[curYear][purposeToAppend] = 0
+                }
+                else{ //purpose exists, so copy over the value
+                    yearlyPurposeDonationTopTen[curYear][purposeToAppend] = yearlyPurposeDonation[curYear][purposeToAppend]
+                }
+            }
+        })
+        console.log("yearlyPurposeDonationTopTen: ", yearlyPurposeDonationTopTen)
+
+        //now reformat to csv style data (e.g. array of {year:1970,purpose1:"",purpose2:"",...purpose10:""})
+        yearlyPurposeDonationTopTenCSV = []
+        Object.keys(yearlyPurposeDonationTopTen).forEach(function(yearKey){
+            yearPurposes = yearlyPurposeDonationTopTen[yearKey]
+            yearPurposes["year"] = yearKey
+            yearlyPurposeDonationTopTenCSV.push(yearPurposes)
+        })
+        topTenPurposeNames.unshift("year") //append year to front of array
+        console.log("topTenPurposeNames with year: ", topTenPurposeNames)
+        yearlyPurposeDonationTopTenCSV.columns = topTenPurposeNames
+        console.log("yearlyPurposeDonationTopTenCSV: ", yearlyPurposeDonationTopTenCSV)
+
+        //convert each year's donations to be percent of that year
+        counter = 0
+        yearlyPurposeDonationTopTenCSV.forEach(function(eachYearList){
+            totalDonationOfYear = 0
+            Object.keys(eachYearList).forEach(function(eachPurposeDonationKey){
+                if(eachPurposeDonationKey != "year"){
+                    totalDonationOfYear += eachYearList[eachPurposeDonationKey]
+                }
+            })
+            //now that we have totaldonation of each year, loop through again and divide to get percent
+            Object.keys(eachYearList).forEach(function(eachPurposeDonationKey){
+                if(eachPurposeDonationKey != "year"){
+                    yearlyPurposeDonationTopTenCSV[counter][eachPurposeDonationKey] = yearlyPurposeDonationTopTenCSV[counter][eachPurposeDonationKey]/totalDonationOfYear * 100
+                }
+            })
+            counter += 1
+        })
+
+        console.log("yearlyPurposeDonationTopTenCSV percent: ", yearlyPurposeDonationTopTenCSV)
+
+        var margin = {top: 10, right: 400, bottom: 50, left: 100},
+        width = 720 //- margin.left - margin.right,
+        height = 720 //- margin.top - margin.bottom;
+
+        // append the svg object to the body of the page
+        var svg = d3.select("#my_dataviz")
+            //.append("svg")
+            .attr("width", width + margin.left + margin.right)
+            //.attr("width", width)// + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            //.attr("height", height)// + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform",
+                    "translate(" + margin.left + "," + margin.top + ")");
+
+        // Parse the Data
+        //d3.csv("https://raw.githubusercontent.com/holtzy/data_to_viz/master/Example_dataset/5_OneCatSevNumOrdered_wide.csv", function(data) {
+            data = yearlyPurposeDonationTopTenCSV
+            console.log("csv data for top 10 purpose donations: ", data)
+            //////////
+            // GENERAL //
+            //////////
+
+            // List of groups = header of the csv files
+            var keys = data.columns.slice(1) //these are categories (in our case, purposes)
+            console.log("column keys: ", keys)
+
+            // color palette
+            var color = d3.scaleOrdinal()
+                .domain(keys)
+                //.range(d3.schemeSet2);
+                .range(["#4E79A7","#F28E2B","#E15759","#76B7B2","#59A14F","#EDC948","#B07AA1","#FF9DA7","#9C755F","#BAB0AC"]); //using tableau10 color palette to represent the top 10 purposes
+
+            //stack the data?
+            var stackedData = d3.stack()
+                .keys(keys)
+                (data)
+
+
+
+            //////////
+            // AXIS //
+            //////////
+
+            // Add X axis
+            var x = d3.scaleLinear()
+                .domain(d3.extent(data, function(d) { return d.year; }))
+                .range([ 0, width ]);
+            var xAxis = svg.append("g")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(x).ticks(5))
+
+            // Add X axis label:
+            svg.append("text")
+                .attr("text-anchor", "end")
+                .attr("x", width)
+                .attr("y", height+40 )
+                .text("Time (year)");
+
+            // Add Y axis label:
+            svg.append("text")
+                //.attr("text-anchor", "end")
+                //.attr("x", 0)
+                //.attr("y", -20 )
+                .attr("transform", "rotate(-90)")
+                .attr("y", -margin.left/3)
+                .attr("x", -margin.top-350)
+                .text("Percent Commitment for that Year")
+                .attr("text-anchor", "start")
+                .attr("font-size", "20px")
+
+            // Add Y axis
+            var y = d3.scaleLinear()
+                .domain([0, 100])
+                .range([ height, 0 ]);
+            svg.append("g")
+                .call(d3.axisLeft(y).ticks(5))
+
+
+
+            //////////
+            // BRUSHING AND CHART //
+            //////////
+
+            // Add a clipPath: everything out of this area won't be drawn.
+            var clip = svg.append("defs").append("svg:clipPath")
+                .attr("id", "clip")
+                .append("svg:rect")
+                .attr("width", width )
+                .attr("height", height )
+                .attr("x", 0)
+                .attr("y", 0);
+
+            // Add brushing
+            var brush = d3.brushX()                 // Add the brush feature using the d3.brush function
+                .extent( [ [0,0], [width,height] ] ) // initialise the brush area: start at 0,0 and finishes at width,height: it means I select the whole graph area
+                .on("end", updateChart) // Each time the brush selection changes, trigger the 'updateChart' function
+
+            // Create the scatter variable: where both the circles and the brush take place
+            var areaChart = svg.append('g')
+                .attr("clip-path", "url(#clip)")
+
+            // Area generator
+            var area = d3.area()
+                .x(function(d) { return x(d.data.year); })
+                .y0(function(d) { return y(d[0]); })
+                .y1(function(d) { return y(d[1]); })
+            //console.log("area: ", area)
+            // Show the areas
+            areaChart
+                .selectAll("mylayers")
+                .data(stackedData)
+                .enter()
+                .append("path")
+                    .attr("class", function(d) { return "myArea " + d.key })
+                    .style("fill", function(d) { return color(d.key); })
+                    .attr("d", area)
+
+            // Add the brushing
+            areaChart
+                .append("g")
+                    .attr("class", "brush")
+                    .call(brush);
+
+            var idleTimeout
+            function idled() { idleTimeout = null; }
+
+            // A function that update the chart for given boundaries
+            function updateChart() {
+
+            extent = d3.event.selection
+
+            // If no selection, back to initial coordinate. Otherwise, update X axis domain
+            if(!extent){
+                if (!idleTimeout) return idleTimeout = setTimeout(idled, 350); // This allows to wait a little bit
+                x.domain(d3.extent(data, function(d) { return d.year; }))
+            }else{
+                x.domain([ x.invert(extent[0]), x.invert(extent[1]) ])
+                areaChart.select(".brush").call(brush.move, null) // This remove the grey brush area as soon as the selection has been done
+            }
+
+            // Update axis and area position
+            xAxis.transition().duration(1000).call(d3.axisBottom(x).ticks(5))
+            areaChart
+                .selectAll("path")
+                .transition().duration(1000)
+                .attr("d", area)
+            }
+
+
+
+            //////////
+            // HIGHLIGHT GROUP //
+            //////////
+
+            // What to do when one group is hovered
+            var highlight = function(d){
+                //console.log(d)
+                // reduce opacity of all groups
+                d3.selectAll(".myArea").style("opacity", .1)
+                // expect the one that is hovered
+                d3.select("."+d).style("opacity", 1)
+                //d3.select("#line_" + d.key.replace(/[ )(]/g,'')).style("opacity", 1)
+            }
+
+            // And when it is not hovered anymore
+            var noHighlight = function(d){
+                d3.selectAll(".myArea").style("opacity", 1)
+            }
+
+
+
+            //////////
+            // LEGEND //
+            //////////
+
+            // Add one dot in the legend for each name.
+            var size = 20
+            keys.reverse() //plot the legend backwards so it matches the graph order from top down
+            //console.log("reverse keys: ", keys)
+            var shiftDown = 50
+            svg.selectAll("myrect")
+                .data(keys)
+                .enter()
+                .append("rect")
+                //.attr("x", 400)
+                .attr("x", width+10)
+                .attr("y", function(d,i){ return i*(size+5) + shiftDown}) // 100 is where the first dot appears. 25 is the distance between dots
+                .attr("width", size)
+                .attr("height", size)
+                .style("fill", function(d){ return color(d)})
+                .on("mouseover", highlight)
+                .on("mouseleave", noHighlight)
+
+            // Add one label in the legend for each name.
+            svg.selectAll("mylabels")
+                .data(keys)
+                .enter()
+                .append("text")
+                //.attr("x", 400 + size*1.2)
+                .attr("x", width+10+size*1.2)
+                .attr("y", function(d,i){ return i*(size+5) + (size/2) + shiftDown}) // 100 is where the first dot appears. 25 is the distance between dots
+                .style("fill", function(d){ return color(d)})
+                .text(function(d){ return d})
+                .attr("text-anchor", "left")
+                .style("alignment-baseline", "middle")
+                .on("mouseover", highlight)
+                .on("mouseleave", noHighlight)
+            
+            //give a name for the Legend
+            svg.append("text")
+                .attr("x", width+30)
+                .attr("y", shiftDown-20)
+                .style("font-size", "20px")
+                .text("Top 10 Purposes")
+
+        //}) //end read csv
+
+    } //end of function question2
+
+
+    loadData().then(question2);
+
+</script>

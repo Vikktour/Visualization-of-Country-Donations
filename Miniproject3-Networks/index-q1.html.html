@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+  <style>
+      body {
+          font-family: Helvetica, Arial, sans-serif;
+          background-color: #ffffff;
+      }
+
+      h1 {
+          background-color: #2a5599;
+          color: #ffffff;
+          padding: 5px;
+          
+      }
+
+      div.tooltip {	
+        position: absolute;	
+        text-align: center;			
+        width: 200px;					
+        height: 150px;					
+        padding: 2px;				
+        font: 25px sans-serif;		
+        background: lightsteelblue;	
+        border: 0px;		
+        border-radius: 8px;			
+        pointer-events: none;			
+      }
+      
+      .mainView{
+          display: flex; /*alligns the items in mainView side by side*/
+          flex-wrap: wrap;
+      }
+
+  </style>   
+</head>
+
+<body>
+  <h1>Visualization 1: Donations to Recipients</h1>
+  <div class="mainView">
+      <div>
+          <h2>Treemap</h2>
+          <h3>Interaction 1: hover over each tree block to display recipient and amount</h3>
+          <svg id="my_dataviz"></svg>
+      </div>       
+      
+  </div>
+</body>
+
+<!-- Load d3.js -->
+<script src="https://d3js.org/d3.v4.js"></script>
+
+<!-- Create a div where the graph will take place -->
+<div id="my_dataviz"></div>
+
+<script src="https://d3js.org/d3.v3.min.js"></script> <!--load d3 version 3 as d3v3 instead of d3-->
+<script>
+  d3v3 = d3
+  window.d3 = null
+</script>
+<script src="https://d3js.org/d3.v4.js"></script> <!--load d3 version 4 as d3v4 instead of d3-->
+<script>
+  d3v4 = d3
+  window.d3 = null
+</script>
+<script src="https://d3js.org/d3.v5.js"></script> <!-- load d3v5 as d3-->
+
+<script>
+
+    //load data and organize
+    var csvData = []
+
+    function loadData() {
+        return Promise.all([
+            d3.csv("aiddata.csv")
+        ]).then(datasets => {
+            csvData = datasets[0];
+            return csvData
+        })
+    }
+
+
+
+    function question1(){
+      console.log("csvData: ",csvData)
+
+      //format the csvData to be: [{name: "Origin", parent: "", value: ""}, {name: "grp1", parent: "Origin", value: "12"},...]
+      //[{donor: "Japan", parent:" ",commitment:""}, {recipient:"Australia",parent:"Japan",commitment:""}]
+      //donor,recipient,time,amount
+      
+      csvLength = csvData.length
+      //get top 20 donors and top 10 recipients
+      //[{donor1:totalCommitment1},{donor2:totalCommitment2},...]
+        donorCommitments = []
+        recipientCommitments = []
+        for(i=0;i<csvLength;i++){
+          donor = csvData[i].donor
+          recipient = csvData[i].recipient
+          commitment = +csvData[i].commitment_amount_usd_constant
+
+          //get donors
+          if(donor in donorCommitments == false){
+            donorCommitments[donor] = commitment
+          }
+          else{
+            donorCommitments[donor] += commitment
+          }
+
+          //get recipients
+          if(recipient in recipientCommitments == false){
+            recipientCommitments[recipient] = commitment
+          }
+          else{
+            recipientCommitments[recipient] += commitment
+          }
+        }
+        console.log("donorCommitments: ", donorCommitments)
+        console.log("recipientCommitments: ", recipientCommitments)
+        //sort donors
+        var sortedDonorCommitments = Object.keys(donorCommitments).map(function(key) {
+          return [key, donorCommitments[key]];
+        });
+
+        // Sort the array based on the second element
+        sortedDonorCommitments.sort(function(first, second) {
+          return second[1] - first[1];
+        });
+
+        // Create a new array with only the first 20 items
+        sortedDonorCommitments = sortedDonorCommitments.slice(0, 20)
+        console.log("top20 sortedDonorCommitments: ", sortedDonorCommitments)
+
+
+        //sort recipients
+        var sortedRecipientCommitments = Object.keys(recipientCommitments).map(function(key) {
+          return [key, recipientCommitments[key]];
+        });
+
+        // Sort the array based on the second element
+        sortedRecipientCommitments.sort(function(first, second) {
+          return second[1] - first[1];
+        });
+
+        // Create a new array with only the first 10 items
+        sortedRecipientCommitments = sortedRecipientCommitments.slice(0, 10)
+        console.log("top10 sortedRecipientCommitments: ", sortedRecipientCommitments)
+
+        //now have a list that stores the names of the top 20 donors, top 10 recipients
+        top20Donors = []
+        top10Recipients = []
+        sortedDonorCommitments.forEach(function(d){top20Donors.push(d[0])})
+        sortedRecipientCommitments.forEach(function(d){top10Recipients.push(d[0])})
+        console.log("top20Donors: ", top20Donors)
+        console.log("top10Recipients: ", top10Recipients)
+
+      //for each donor make: [{recipient:amount}{recipient,amount},...]
+        eachDonorData = []
+        eachRecipientData = []
+
+        for(i=0;i<csvData.length;i++){
+          
+          donor = csvData[i].donor
+          recipient = csvData[i].recipient
+          commitment = +csvData[i].commitment_amount_usd_constant
+
+          //build donors array
+          if(top20Donors.includes(donor)){
+            //add to eachDonorData
+            if(donor in eachDonorData == false){
+              eachDonorData[donor] = {}
+            }
+
+            //append commitment
+            if(recipient in eachDonorData[donor] == false){
+              eachDonorData[donor][recipient] = commitment
+            }
+            else{
+              eachDonorData[donor][recipient] += commitment
+            }
+            
+          }
+          
+          //build recipients array
+          if(top10Recipients.includes(recipient)){
+            //append recipient
+            if(recipient in eachRecipientData == false){
+              eachRecipientData[recipient] = {}
+            }
+            //append commitment
+            if(donor in eachRecipientData[recipient]==false){
+              eachRecipientData[recipient][donor] = commitment
+            }
+            else{
+              eachRecipientData[recipient][donor] += commitment
+            }
+          }
+
+          
+        }//end of for csvData
+        console.log("eachDonorData: ", eachDonorData)
+        console.log("eachRecipientData: ",eachRecipientData)
+
+        //for eachDonor, get the totalCommitment of that donor, and also totalCommitmentOfTop20Donors
+        totalTop20DonorCommitment = 0 //commitment of all 20 donors combined
+        highestDonorAmount = 0 //get the highest donor commitment of all top 20
+        top20DonorsAndCommitment = []
+        Object.keys(eachDonorData).forEach(function(donorKey){
+          donorTotalCommitment = 0 //commitment of a single donor
+          donor = donorKey
+          Object.keys(eachDonorData[donorKey]).forEach(function(recipientKey){
+            commitment = eachDonorData[donorKey][recipientKey]
+            donorTotalCommitment += commitment
+          })
+          if(highestDonorAmount<donorTotalCommitment){
+            highestDonorAmount = donorTotalCommitment
+          }
+          top20DonorsAndCommitment[donorKey] = donorTotalCommitment
+          totalTop20DonorCommitment += donorTotalCommitment
+        })
+        
+        console.log("top20DonorsAndCommitment: ", top20DonorsAndCommitment)
+        console.log("totalTop20DonorCommitment: ",totalTop20DonorCommitment)
+
+        //sort totalTop20DonorCommitment in decreasing order
+        // Create items array
+        var items = Object.keys(top20DonorsAndCommitment).map(function(key) {
+          return [key, top20DonorsAndCommitment[key]];
+        });
+        // Sort the array based on the second element
+        items.sort(function(first, second) {
+          return second[1] - first[1];
+        });
+        top20DonorsAndCommitment = []
+        items.forEach(function(eachPair){
+          top20DonorsAndCommitment[eachPair[0]] = eachPair[1]
+        })
+        console.log("top20DonorsAndCommitment in decreasing amount: ", top20DonorsAndCommitment)
+      
+      //now use top20DonorsAndCommitment to sort eachDonorData by donors in order of decreasing totalCommitment
+      tempDonorData = []
+      Object.keys(top20DonorsAndCommitment).forEach(function(donorKey){
+        tempDonorData[donorKey] = eachDonorData[donorKey]
+      })
+      eachDonorData = tempDonorData
+      console.log("sorted eachDonorData: ", eachDonorData)
+      // Define the div for the tooltip
+      var div = d3.select("body").append("div")	
+          .attr("class", "tooltip")				
+          .style("opacity", 0);
+
+      //source code for treemap: https://www.d3-graph-gallery.com/graph/treemap_basic.html
+      // set the dimensions and margins of the graph
+      //var margin = {top: 10, right: 10, bottom: 10, left: 10},
+      var margin = {top: 1000, right: 40, bottom: 40, left: 40},
+        //width = 445 - margin.left - margin.right,
+        //height = 445 - margin.top - margin.bottom;
+        width = 5000 //- margin.left-margin.right
+        height= 7500 //- margin.top-margin.bottom
+      
+      border = 1
+      borderColor = 'orange'
+      // append the svg object to the body of the page
+      var svg = d3.select("#my_dataviz")
+      //.append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        //.attr("border",border)
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+      
+      scaleDownList = [] //check for debug
+      //loop and create tree maps
+      numDonors = 20
+      counter = 0
+      for(j=0;j<5;j++){
+        for(i=0;i<4;i++){
+          //format the data to be drawn in treemap
+          treemapData = []
+          sampleDonorName = Object.keys(eachDonorData)[counter]
+          sampleDonor=eachDonorData[sampleDonorName]; 
+          //console.log(`donations from ${sampleDonorName}: ${JSON.stringify(sampleDonor)}`)
+          group1 = {name:sampleDonorName,parent:"",value:""}
+          treemapData.push(group1)
+          Object.keys(sampleDonor).forEach(function(recipientKey){
+            commitment = sampleDonor[recipientKey]
+            group = {name:recipientKey,parent:sampleDonorName,value:commitment}
+            treemapData.push(group)
+          })
+          treemapData.columns = ["name","parent","value"]
+          //console.log("treemapData: ", treemapData)
+          
+          data=treemapData
+          //console.log("data: ", data)
+          // stratify the data: reformatting for d3.js
+          var root = d3v4.stratify()
+            .id(function(d) { return d.name; })   // Name of the entity (column name is name in csv)
+            .parentId(function(d) { return d.parent; })   // Name of the parent (column name is parent in csv)
+            (data);
+          root.sum(function(d) { return +d.value })   // Compute the numeric value for each entity
+
+          //scale down the size based on curdonorcontribution/allTop20DonorContribution
+          //scaleDown = top20DonorsAndCommitment[sampleDonorName]/totalTop20DonorCommitment
+          //scaleDown = top20DonorsAndCommitment[sampleDonorName]/highestDonorAmount //so the largest donor is 1:1
+          var linearScale = d3.scaleLinear()
+            .domain([0, highestDonorAmount])
+            .range([0.5, 1]);
+          scaleDown = linearScale(top20DonorsAndCommitment[sampleDonorName])
+          //console.log("scaleDown: ",scaleDown)
+          scaleDownList.push(scaleDown)
+
+          // Then d3.treemap computes the position of each element of the hierarchy
+          // The coordinates are added to the root object above
+          d3v4.treemap()
+            //.size([width/4, height/5])
+            .size([width/4*scaleDown, height/5*scaleDown])
+            .padding(4)
+            (root)
+
+          //console.log("root.leaves(): ",root.leaves())
+          //shifting the svg of each donor
+          shiftRight = i*width/4
+          shiftDown = j*height/5
+          
+          // use this information to add rectangles:
+          var svg = d3.select("#my_dataviz")
+          .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            //.attr("border",border)
+          .append("g")
+
+          svg
+            .selectAll("rect")
+            .data(root.leaves())
+            .enter()
+            .append("rect")
+              
+              .attr('x', function (d) { 
+                xCoord = d.x0 +shiftRight
+                //console.log("rect xCoord: ",xCoord)
+                return xCoord; 
+              })
+              //.attr('x', function(d) {return d.x0;})            
+              //.attr('y', function (d) { return d.y0; })
+              .attr('y', function (d) { 
+                yCoord = d.y0 + shiftDown
+                //console.log("rect yCoord: ",yCoord)
+                return yCoord; 
+              })
+              //.attr("transform", "translate("+shiftRight+",0)")
+              .attr('width', function (d) { return d.x1 - d.x0; })
+              .attr('height', function (d) { return d.y1 - d.y0; })
+              .style("stroke", "black")
+              .style("fill", "#69b3a2")
+              .on("mouseover", function(d) {		
+                div.transition()		
+                    .duration(200)		
+                    .style("opacity", .9);		
+                div	.html("Recipient: <br/>"+ d.data.name + "<br/>"  + "Amount: "+d.value)	
+                    .style("left", (d3.event.pageX) + "px")		
+                    .style("top", (d3.event.pageY - 28) + "px");	
+              })					
+              .on("mouseout", function(d) {		
+                  div.transition()		
+                      .duration(500)		
+                      .style("opacity", 0);	
+              });
+              //sourcecode for hover tooltip interaction: https://bl.ocks.org/d3noob/a22c42db65eb00d4e369
+            
+            scaleFontSizeWidth = d3.scaleLinear() //scale down font size according to rectangle width = d.x1 - d.x0
+              .domain([0, width/4*scaleDown])
+              .range([0.1, 1]); 
+            scaleFontSizeHeight = d3.scaleLinear() //scale down font size according to rectangle height = d.y1 - d.y0
+              .domain([0, height/5*scaleDown])
+              .range([0.5, 1]); 
+          // and to add the text labels
+            svg
+              .selectAll("text")
+              .data(root.leaves())
+              .enter()
+              .append("text")
+                .attr("x", function(d){
+                  textX = d.x0+shiftRight+1
+                  //console.log("text xCoord: ", textX)
+                  return textX
+                })    // +10 to adjust position (more right)
+                //.attr("x", function(d){ return d.x0+10})    // +10 to adjust position (more right)
+                .attr("y", function(d){ 
+                  fontSize = scaleFontSizeWidth(d.x1 - d.x0)*scaleFontSizeHeight(d.y1 - d.y0)*100
+                  return d.y0+shiftDown + fontSize
+                })    
+                .text(function(d){ return d.data.name})
+                //.attr("font-size", "50px")
+                .attr("font-size", function(d){
+                  return scaleFontSizeWidth(d.x1 - d.x0)*scaleFontSizeHeight(d.y1 - d.y0)*100
+                }) //scale down font size according to rectangle width
+                .attr("fill", "black")
+          
+            //add donorName for each treemap diagram
+            svg.append("text")
+              .attr("x", shiftRight+width/8) //i*width/4 + 1/2*width/4
+              .attr("y", shiftDown+height/10) //j*height/5 + 1/2*height/5
+              .style("font-size", "75px")
+              .text("Donor: " +sampleDonorName)
+              .attr("text-anchor", "middle") //makes text be drawn from middle-out instead of right-out
+              //.style("alignment-baseline", "middle")
+              .style("fill","red")
+              .style("stroke","black")
+              .style("stroke-width",2)
+              .style("font-weight","bold")
+
+          counter += 1
+        }//for i
+
+        
+      }//for j
+
+      //console.log("scaleDownList: ",scaleDownList)
+    } //end of function question1()
+
+    loadData().then(question1)
+    
+</script>

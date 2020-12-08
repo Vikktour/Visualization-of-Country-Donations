@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+    <style>
+        body {
+            font-family: Helvetica, Arial, sans-serif
+        }
+
+        h1 {
+            background-color: #2a5599;
+            color: white;
+            padding: 5px;
+            
+        }
+
+
+        #MultipleBarCharts{
+            border: solid 1px black;
+            background-color: white;
+        }
+        
+        .mainView{
+            display: flex; /*alligns the items in mainView side by side*/
+            flex-wrap: wrap;
+        }
+        
+        .line {
+            fill: none;
+            stroke: steelblue; /*default line color*/
+            /*stroke: orange;*/
+            /*stroke: yellow*/
+            stroke-width: 2px;
+        }
+
+    </style>   
+</head>
+
+<body>
+    <h1>Visualization 1: Donation and Reception Over Time and Varying Countries</h1>
+    <div class="mainView">
+        <div>
+            <h2>Multiple Bar Charts</h2>
+            <svg id="MultipleBarCharts"></svg>
+        </div>       
+        
+    </div>
+</body>
+
+<script src="https://d3js.org/d3.v3.min.js"></script> <!--load d3 version 3 as d3v3 instead of d3-->
+<script>
+  d3v3 = d3
+  window.d3 = null
+</script>
+<script src="https://d3js.org/d3.v4.js"></script> <!--load d3 version 4 as d3v4 instead of d3-->
+<script>
+  d3v4 = d3
+  window.d3 = null
+</script>
+<script src="https://d3js.org/d3.v5.js"></script> <!-- load d3v5 as d3-->
+
+<script>
+    
+    var csvData = []
+
+    function loadData() {
+        return Promise.all([
+            d3.csv("aiddata.csv")
+        ]).then(datasets => {
+            csvData = datasets[0];
+            return csvData
+        })
+    }
+
+    
+    function question1(){
+        console.log("csvData: ", csvData)
+
+        //parse data
+        //Need: 
+        //donorCountry: year,donorAmount (sorted by year from lowest to highest)
+        //recepientCountry: year,recipientAmount
+        yearlyCountryDonation = []
+        yearlyCountryReception = []
+        debugCounter = -1 //used to print a small amount of times
+        csvData.forEach(function(item,i){
+            debugCounter += 1
+            curDonor = item.donor
+            curRecipient = item.recipient
+            curYear = item.year
+            //console.log("curCommitment: ", +item.commitment_amount_usd_constant)
+            curCommitment = +item.commitment_amount_usd_constant
+            //console.log("curCommitment: ", curCommitment)
+
+            
+
+            //append sample to donor list
+            if(curDonor in yearlyCountryDonation == false){
+                yearlyCountryDonation[curDonor] = {}
+            }
+            //if(debugCounter < 10){
+                //console.log("curCommitment: ", curCommitment)
+                //console.log("yearlyCountryDonation[curDonor][curYear] ", yearlyCountryDonation[curDonor][curYear])
+            //}
+            
+            //check if commitment exists for curYear, if so then sum up
+            if(curYear in yearlyCountryDonation[curDonor] == false){
+                //console.log("assigning curCommitment: ", curCommitment)
+                yearlyCountryDonation[curDonor][curYear] = curCommitment
+            }
+            else{
+                //console.log("before +=curCommitment: ", yearlyCountryDonation[curDonor][curYear])
+                yearlyCountryDonation[curDonor][curYear] += curCommitment
+                //console.log("after +=curCommitment: ", yearlyCountryDonation[curDonor][curYear])
+            }
+
+            //append sample to recipient list
+            if(curRecipient in yearlyCountryReception == false){
+                yearlyCountryReception[curRecipient] = {}
+            }
+            //check if commitment exists for curYear, if so then sum up
+            if(curYear in yearlyCountryReception[curRecipient] == false){
+                yearlyCountryReception[curRecipient][curYear] = curCommitment
+            }
+            else{
+                //console.log("yearlyCountryReception before +=curCommitment: ", yearlyCountryReception[curRecipient][curYear])
+                //console.log("yearlyCountryReception yearList before +=curCommitment: ", yearlyCountryReception[curRecipient])
+                yearlyCountryReception[curRecipient][curYear] += curCommitment
+            }
+                
+
+        })
+        console.log("yearlyCountryDonation: ", yearlyCountryDonation)
+        console.log("yearlyCountryReception: ", yearlyCountryReception)
+
+        //combine merge donor/recipient on country, so we can do a double line graph
+        countryCombinedCommitment = []
+        Object.keys(yearlyCountryDonation).forEach(function(keyi){
+            curDonor = keyi
+            donorMatchesRecipient = false
+            Object.keys(yearlyCountryReception).forEach(function(keyj){
+                curRecipient = keyj
+                //aggregrate only for donor and recipient of the same country
+                if(curDonor == curRecipient){
+                    donorMatchesRecipient = true
+                    curCountry = curDonor //easier wording for abstraction
+                    countryCombinedCommitment[curCountry] = {}
+                    //loop through each donor and add to year
+                    Object.keys(yearlyCountryDonation[keyi]).forEach(function(donorYearKey){
+                        donorYearCommitment = yearlyCountryDonation[keyi][donorYearKey]
+                        //console.log(`Year ${donorYearKey} with donation of ${donorYearCommitment}`)
+                        if(donorYearKey in yearlyCountryReception[keyj] == true){ //if there's also a reception by the same country in the same year, then add that
+                            recipientYearCommitment = yearlyCountryReception[keyj][donorYearKey]
+                        }
+                        else{
+                            recipientYearCommitment = 0
+                        }
+                        curYear = donorYearKey //for easier abstraction
+                        countryCombinedCommitment[curCountry][curYear] = {}
+                        countryCombinedCommitment[curCountry][curYear]["donation"] = donorYearCommitment
+                        countryCombinedCommitment[curCountry][curYear]["reception"] = recipientYearCommitment
+                    })
+                    
+                    //now loop through recipients to add the years we left behind from recipient
+                    Object.keys(yearlyCountryReception[keyj]).forEach(function(recipientYearKey){
+                        //check to see if the year already exists for the combinedCommitment. If so then do nothing(since we did it just before), otherwise append
+                        if(recipientYearKey in countryCombinedCommitment[curCountry] == false){
+                            recipientYearCommitment = yearlyCountryReception[keyj][recipientYearKey]
+                            curYear = recipientYearKey
+                            countryCombinedCommitment[curCountry][curYear] = {}
+                            countryCombinedCommitment[curCountry][curYear]["donation"] = 0
+                            countryCombinedCommitment[curCountry][curYear]["reception"] = recipientYearCommitment
+                        }
+                        
+                    })
+                    //break //we found the match, so no need to check the other countries of recipient. Too bad break doesn't work for forEach.
+                }//done recipientForEach
+                
+            })//done looping through each recipient key
+            //We have gotten: donors that match recipient. Still need: donors that doesn't match recipient, and recipients that don't match donors
+            //if there's no recipient country that matches the donor country, then just append everything from the donor
+            if(donorMatchesRecipient == false){
+                Object.keys(yearlyCountryDonation[keyi]).forEach(function(donorYearKey){
+                    donorYearCommitment = yearlyCountryDonation[keyi][donorYearKey]
+                    curYear = donorYearKey
+                    countryCombinedCommitment[curCountry][curYear] = {}
+                    countryCombinedCommitment[curCountry][curYear]["donation"] = donorYearCommitment
+                    countryCombinedCommitment[curCountry][curYear]["reception"] = 0
+                })
+            }
+        })
+        
+        //we have gotten: donors that match recipient, and donors that doesn't match recipient. Still need recipients that don't match donors
+        Object.keys(yearlyCountryReception).forEach(function(keyj){
+            curCountry = keyj
+            //if this country is not in combinedCommitment, then add it
+            if(curCountry in countryCombinedCommitment == false){
+                countryCombinedCommitment[curCountry] = {}
+                Object.keys(yearlyCountryReception[keyj]).forEach(function(recipientYearKey){
+                    curYear = recipientYearKey
+                    curCommitment = yearlyCountryReception[keyj][recipientYearKey]
+                    //console.log(`curCountry:${curCountry},curYear:${curYear},curCommitment:${curCommitment}`)
+                    
+                    countryCombinedCommitment[curCountry][curYear] = {}
+                    countryCombinedCommitment[curCountry][curYear]["donation"] = 0
+                    countryCombinedCommitment[curCountry][curYear]["reception"] = curCommitment
+                    //console.log("countryCombinedCommitment[curCountry]: ", countryCombinedCommitment[curCountry])
+                })
+            }
+        })
+
+
+        console.log("countryCombinedCommitment: ", countryCombinedCommitment)        
+
+        //reformat the data once more
+        //country: {year,donation,reception}
+        //America: {1950,555,232},{1951,522,332}
+        var countryDonationsReceptions = []
+        Object.keys(countryCombinedCommitment).forEach(function(countryKey){
+            //countryDonationsReceptions[countryKey] = []
+            countryDonationsReceptions[countryKey] = new Array()
+            Object.keys(countryCombinedCommitment[countryKey]).forEach(function(yearKey){
+                country = countryKey
+                year = yearKey
+                donation = countryCombinedCommitment[countryKey][yearKey].donation
+                reception = countryCombinedCommitment[countryKey][yearKey].reception
+                dict = {"year":year,"donation":donation,"reception":reception}
+                countryDonationsReceptions[country].push(dict)
+            })
+        })
+        console.log("countryDonationsReceptions: ", countryDonationsReceptions)
+        //now let's test out the reformated dateset by picking one country and plotting a double line graph
+        //singleCountryData = countryDonationsReceptions["Austria"]
+        //console.log("singleCountryData: ", singleCountryData)
+
+        //now test with 2country data and use for loop
+        //multipleCountryData = [countryDonationsReceptions["Austria"],countryDonationsReceptions["India"]]
+
+        //I am doubting the India reception amount, let me sum up the reception to see how much they received in total
+
+        
+
+        //multiple line graph method taken from https://bl.ocks.org/d3noob/4db972df5d7efc7d611255d1cc6f3c4f
+        // set the dimensions and margins of the graph
+        var margin = {top: 20, right: 150, bottom: 30, left: 130},
+            //width = 960 - margin.left - margin.right,
+            width = 1280 - margin.left - margin.right,
+            //height = 500 - margin.top - margin.bottom;
+            height = 6000 - margin.top - margin.bottom;
+
+        //find min,max of commitment to help find extent of domain/range
+        let xmin = d3.min(csvData, d => d.year)
+        let xmax = d3.max(csvData, d => d.year)
+        let ymin = 0
+        //need to compute for ymax
+        let ymax = 0 //initialize as 0, then compute
+        Object.keys(countryCombinedCommitment).forEach(function(countryKey){
+            Object.keys(countryCombinedCommitment[countryKey]).forEach(function(yearKey){
+                donationAmount = countryCombinedCommitment[countryKey][yearKey].donation
+                receptionAmount = countryCombinedCommitment[countryKey][yearKey].reception
+                if(ymax<donationAmount)
+                    ymax = donationAmount
+                if(ymax<receptionAmount)
+                    ymax = receptionAmount
+            })
+        })
+        //ymax = Math.log10(ymax)
+        //console.log("ymax: ", ymax)
+
+        i=0
+        numCountries = Object.keys(countryDonationsReceptions).length
+        //for(i=0;i<numCountries;i++){
+        Object.keys(countryDonationsReceptions).forEach(function(countryKey){    
+            singleCountryData = countryDonationsReceptions[countryKey]
+        
+            //draw the graphs
+            //set the ranges
+            var x = d3.scaleLinear().domain([xmin,xmax]).range([0,width])
+            var y = d3.scaleLinear().domain([ymin/1000000000,ymax/1000000000]).range([height/numCountries,0]) //make in billions for ease to see smaller numbers
+
+            //define line 1 - donations
+            var donationLine = d3.line()
+                .x(function(d){return x(d.year)})
+                .y(function(d){return y(d.donation/1000000000)})
+                //.y(function(d){return y(Math.log10(d.donation))})
+            var receptionLine = d3.line()
+                .x(function(d){return x(d.year)})
+                .y(function(d){return y(d.reception/1000000000)})
+                //.y(function(d){return y(Math.log10(d.reception))})
+
+            //create svg to draw graph
+            var svg = d3.select("#MultipleBarCharts")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+                .attr("transform",
+                        "translate(" + margin.left + "," + margin.top + ")");
+
+            //draw donation data
+            svg.append("path")
+                .data([singleCountryData])
+                .attr("class","line")
+                .attr("transform", "translate(0," + height/numCountries*i + ")")
+                .style("stroke", "green")
+                .attr("d", donationLine)
+            //draw reception data
+            svg.append("path")
+                .data([singleCountryData])
+                .attr("class","line")
+                .attr("transform", "translate(0," + height/numCountries*i + ")")
+                .style("stroke", "red")
+                .attr("d", receptionLine)
+            
+            //X-axis
+            svg.append("g")
+                .attr("transform", "translate(0," + height/numCountries*(i+1) + ")")
+                .call(d3.axisBottom(x));
+            
+            //y-axis
+            svg.append("g")
+                .attr("transform", "translate(0," + height/numCountries*i + ")")
+                .call(d3.axisLeft(y).ticks(5,"f"));
+            //y-axis label
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 20 - margin.left)
+                .attr("x",0 - (height*i/numCountries) - 60)
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .attr("font-size", "10px")
+                .text(countryKey);
+            
+            //add label for x-axis
+            svg.append("text")
+                .attr("y", height/numCountries+20)
+                .attr("x", width-15)
+                .style("font-size", "16px")
+                .text("year")
+
+            //add label to indicate this column shows countries
+            svg.append("text")
+                .attr("y", -5)
+                .attr("x", -margin.left+5)
+                .style("font-size", "10px")
+                .text("Country")
+            //add label to indicate units in y-axis
+            svg.append("text")
+                .attr("y", -5)
+                .attr("x", -margin.left+60)
+                .style("font-size", "10px")
+                .text("Amount in Billions USD")
+            
+            //add legend
+            var size = 20
+            keys = ["donation", "reception"]
+            var color = d3.scaleOrdinal()
+                .domain(keys)
+                .range(["green","red"]);
+            //legend squares
+            svg.selectAll("myrect")
+                .data(keys)
+                .enter()
+                .append("rect")
+                //.attr("x", 400)
+                .attr("x", width)
+                .attr("y", function(d,i){ return 10 + i*(size+5)}) // 100 is where the first dot appears. 25 is the distance between dots
+                .attr("width", size)
+                .attr("height", size)
+                .style("fill", function(d){ return color(d)})
+            //legend text
+            svg.selectAll("mylabels")
+                .data(keys)
+                .enter()
+                .append("text")
+                //.attr("x", 400 + size*1.2)
+                .attr("x", width+10+size*1.2)
+                .attr("y", function(d,i){ return 10 + i*(size+5) + (size/2)}) // 100 is where the first dot appears. 25 is the distance between dots
+                .style("fill", function(d){ return color(d)})
+                .text(function(d){ return d})
+                .attr("text-anchor", "left")
+                .style("alignment-baseline", "middle")
+
+            i+=1 //counter for indexing
+        })
+        
+    } //afterLoadData
+
+    
+    //loadData().then(afterLoadData);
+    loadData().then(question1);
+
+</script>
